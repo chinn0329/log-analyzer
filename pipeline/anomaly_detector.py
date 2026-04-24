@@ -4,7 +4,6 @@ anomaly_detector.py — Stage 4b: Anomaly detection using Isolation Forest.
 No labelled data required. Each log entry is scored; entries with
 scores below the threshold are flagged as anomalous.
 
-Owner: Roshan George (1RV24CS235)
 """
 
 import numpy as np

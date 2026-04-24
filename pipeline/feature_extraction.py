@@ -7,7 +7,7 @@ Features used for anomaly detection:
   - hour of day (from timestamp if available)
   - template length (proxy for message complexity)
 
-Owner: Roshan George (1RV24CS235)
+
 """
 
 import re

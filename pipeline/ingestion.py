@@ -4,7 +4,6 @@ ingestion.py — Stage 1: Streaming log ingestion.
 Reads log files line-by-line using a generator so only a small
 chunk of data lives in memory at any time.
 
-Owner: Riya Aggarwal (1RV24CS230)
 """
 
 import psutil

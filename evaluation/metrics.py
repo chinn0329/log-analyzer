@@ -1,7 +1,6 @@
 """
 metrics.py — Evaluation helpers for memory, time, compression, and accuracy.
 
-Owner: Riya Aggarwal (1RV24CS230)
 """
 
 import os

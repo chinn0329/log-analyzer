@@ -1,4 +1,4 @@
-"""Tests for pipeline/anomaly_detector.py — Owner: Roshan George"""
+"""Tests for pipeline/anomaly_detector.py"""
 
 from pipeline.feature_extraction import build_features
 from pipeline.anomaly_detector import train_model, score_logs

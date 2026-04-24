@@ -4,7 +4,6 @@ deduplication.py — Stage 3: Near-duplicate log removal using SimHash / MinHash
 Uses Locality Sensitive Hashing (LSH) to efficiently detect and
 remove near-identical log templates without comparing all pairs.
 
-Owner: Chinmayi Siddapur (1RV24CS069)
 """
 
 from datasketch import MinHash, MinHashLSH
