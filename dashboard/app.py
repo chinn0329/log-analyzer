@@ -3,7 +3,6 @@ app.py — Streamlit dashboard entry point.
 
 Run with: streamlit run dashboard/app.py
 
-Owner: Mayank Bajaj (1RV24CI066)
 """
 
 import streamlit as st

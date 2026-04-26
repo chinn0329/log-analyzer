@@ -1,4 +1,4 @@
-"""Tests for pipeline/parser.py — Owner: Chinmayi Siddapur"""
+"""Tests for pipeline/parser.py """
 
 import pytest
 from pipeline.parser import parse_chunk, build_parser

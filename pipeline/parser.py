@@ -4,7 +4,6 @@ parser.py — Stage 2: Structured log parsing using Drain3.
 Converts unstructured log lines into structured templates and
 assigns each entry a cluster ID.
 
-Owner: Chinmayi Siddapur (1RV24CS069)
 """
 
 from drain3 import TemplateMiner

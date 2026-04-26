@@ -1,4 +1,4 @@
-"""Tests for pipeline/ingestion.py — Owner: Riya Aggarwal"""
+"""Tests for pipeline/ingestion.py"""
 
 import os
 import tempfile

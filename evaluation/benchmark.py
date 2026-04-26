@@ -6,7 +6,6 @@ Generates a CSV and printed summary report.
 Usage:
     python evaluation/benchmark.py --dataset data/samples/sample.log
 
-Owner: Riya Aggarwal (1RV24CS230)
 """
 
 import argparse

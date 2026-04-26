@@ -3,7 +3,6 @@ storage.py — Stage 5a: Save and load processed logs using PyArrow Parquet.
 
 Parquet gives columnar compression — typically 5-10x smaller than raw logs.
 
-Owner: Mayank Bajaj (1RV24CI066)
 """
 
 import os

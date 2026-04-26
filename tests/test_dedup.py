@@ -1,4 +1,4 @@
-"""Tests for pipeline/deduplication.py — Owner: Chinmayi Siddapur"""
+"""Tests for pipeline/deduplication.py """
 
 from pipeline.deduplication import build_lsh, deduplicate_chunk
 
