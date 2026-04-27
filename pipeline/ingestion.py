@@ -1,47 +1,30 @@
-"""
-ingestion.py — Stage 1: Streaming log ingestion.
-
-Reads log files line-by-line using a generator so only a small
-chunk of data lives in memory at any time.
-
-"""
-
-import psutil
 import gc
-from typing import Generator
+import psutil
+import os
 
+def log_memory(label):
+    process = psutil.Process(os.getpid())
+    mem_mb = process.memory_info().rss / (1024 * 1024)
+    print(f"[MEM] {label} — {mem_mb:.1f} MB")
 
-def stream_logs(filepath: str, chunk_size: int = 500) -> Generator[list[str], None, None]:
-    """
-    Stream a log file in chunks without loading it fully into memory.
-
-    Args:
-        filepath: Path to the log file.
-        chunk_size: Number of lines per chunk yielded to the pipeline.
-
-    Yields:
-        List of raw log line strings (one chunk at a time).
-    """
+def stream_logs(filepath, chunk_size=500):
     chunk = []
-    with open(filepath, "r", errors="replace") as f:
+    chunk_number = 0
+
+    with open(filepath, 'r') as f:
         for line in f:
-            line = line.strip()
-            if line:
-                chunk.append(line)
-            if len(chunk) >= chunk_size:
+            chunk.append(line.rstrip('\n'))
+
+            if len(chunk) == chunk_size:
+                chunk_number += 1
                 yield chunk
                 chunk = []
                 gc.collect()
+                log_memory(f"Chunk {chunk_number}")
+
+        # yield any remaining lines at end of file
         if chunk:
+            chunk_number += 1
             yield chunk
-
-
-def get_memory_mb() -> float:
-    """Return current process memory usage in MB."""
-    process = psutil.Process()
-    return process.memory_info().rss / 1024 / 1024
-
-
-def log_memory(label: str) -> None:
-    """Print current memory usage with a label."""
-    print(f"[MEM] {label}: {get_memory_mb():.2f} MB")
+            gc.collect()
+            log_memory(f"Chunk {chunk_number} (final)")
