@@ -3,7 +3,6 @@ parser.py — Stage 2: Structured log parsing using Drain3.
 
 Converts unstructured log lines into structured templates and
 assigns each entry a cluster ID.
-
 """
 
 from drain3 import TemplateMiner
@@ -32,15 +31,16 @@ def parse_line(miner: TemplateMiner, line: str) -> dict:
 
     Args:
         miner: Drain3 TemplateMiner instance.
-        line: Raw log line string.
+        line:  Raw log line string.
 
     Returns:
-        Dict with keys: raw, template, cluster_id, parameters.
+        Dict with keys: raw (str), template (str),
+                        cluster_id (int), parameters (list).
     """
     result = miner.add_log_message(line)
     return {
-        "raw": line,
-        "template": result["template_mined"],
+        "raw":        line,
+        "template":   result["template_mined"],
         "cluster_id": result["cluster_id"],
         "parameters": result.get("parameters", []),
     }
@@ -55,6 +55,12 @@ def parse_chunk(miner: TemplateMiner, chunk: list[str]) -> list[dict]:
         chunk: List of raw log line strings.
 
     Returns:
-        List of parsed log dicts.
+        List of parsed log dicts, each with keys:
+        raw, template, cluster_id, parameters.
     """
-    return [parse_line(miner, line) for line in chunk]
+    parsed = [parse_line(miner, line) for line in chunk]
+
+    unique_templates = len(set(r["template"] for r in parsed))
+    print(f"[PARSER] {len(chunk)} lines → {unique_templates} unique templates")
+
+    return parsed
