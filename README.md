@@ -28,19 +28,6 @@ This project is a **lightweight, memory-efficient alternative** that processes l
 
 ---
 
-## 👥 Team
-
-| # | USN | Name | Modules |
-|---|-----|------|---------|
-| 1 | 1RV24CS230 | Riya Aggarwal | `ingestion.py`, `test_ingestion.py` |
-| 2 | 1RV24CS069 | Chinmayi Siddapur | `parser.py`, `deduplication.py`, `test_parser.py`, `test_dedup.py` |
-| 3 | 1RV24CS235 | Roshan George | `feature_extraction.py`, `anomaly_detector.py`, `test_anomaly.py` |
-| 4 | 1RV24CI066 | Mayank Bajaj | `storage.py`, `main.py`, `test_storage.py`, Frontend Dashboard |
-
-**Mentors:** Dr. Anitha Sandeep (CS Dept) · Prof. Manasa M (AIML Dept)
-
----
-
 ## 🏗️ Project Structure
 
 ```
