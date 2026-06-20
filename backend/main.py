@@ -72,6 +72,10 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     templates_extracted = 0
     deduped_all: list[dict] = []   # only unique entries accumulate here
 
+    # Shared caches for deduplication performance
+    minhash_cache: dict = {}
+    seen_templates: set = set()
+
     # ══════════════════════════════════════════════════════════════════
     #  STREAMING LOOP — Stages 1->2->3 per chunk
     #  RAM stays constant: only one chunk + deduped results in memory
@@ -79,6 +83,8 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     print(f"[1–3/5] Streaming ingestion -> parsing -> dedup ...")
     print(f"        Reading from: {input_path}")
     print()
+
+    t_stage123 = time.time()
 
     for chunk_num, chunk in enumerate(stream_logs(input_path), start=1):
         chunk_size = len(chunk)
@@ -89,10 +95,16 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
         templates_extracted += len(parsed)
 
         # Stage 3: Deduplicate against ALL previously seen entries
-        unique = deduplicate_chunk(lsh, parsed, num_perm=64)
+        unique = deduplicate_chunk(
+            lsh, parsed, num_perm=64,
+            _minhash_cache=minhash_cache,
+            _seen_templates=seen_templates,
+        )
         deduped_all.extend(unique)
 
         # chunk and parsed are now unreferenced -> eligible for GC
+
+    t_stage123_end = time.time()
 
     unique_entries = len(deduped_all)
     print()
@@ -100,6 +112,7 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     print(f"        Templates extracted  : {templates_extracted}")
     print(f"        After dedup          : {unique_entries} unique entries")
     print(f"        Reduction            : {100*(1 - unique_entries/max(lines_ingested,1)):.1f}%")
+    print(f"        Stages 1-3 time      : {t_stage123_end - t_stage123:.2f}s")
     print()
 
     # ══════════════════════════════════════════════════════════════════
@@ -107,22 +120,29 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     #  Runs on the DEDUPLICATED set (60–90% smaller than raw input)
     # ══════════════════════════════════════════════════════════════════
     print("[4/5] Running feature extraction & anomaly detection ...")
+    t_stage4 = time.time()
+
     featured = build_features(deduped_all)
     feature_matrix = [log["features"] for log in featured]
     model = train_model(feature_matrix)
     results = score_logs(model, featured)
 
+    t_stage4_end = time.time()
+
     anomalies = [r for r in results if r.get("is_anomaly")]
     anomaly_count = len(anomalies)
     anomaly_pct = (100.0 * anomaly_count / unique_entries) if unique_entries else 0.0
     print(f"      {anomaly_count} anomalies flagged ({anomaly_pct:.1f}%)")
+    print(f"      Stage 4 time           : {t_stage4_end - t_stage4:.2f}s")
     print()
 
     # ══════════════════════════════════════════════════════════════════
     #  Stage 5: Save to Parquet (compressed columnar format)
     # ══════════════════════════════════════════════════════════════════
     print("[5/5] Saving to Parquet ...")
+    t_stage5 = time.time()
     out_path = save_parquet(results, output_dir)
+    t_stage5_end = time.time()
 
     # ── Timing & memory ────────────────────────────────────────────────
     elapsed = time.time() - start
@@ -169,6 +189,10 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
         print(f"  Raw file size   :  {raw_size_mb:.2f} MB")
         print(f"  Parquet size    :  {parquet_size_mb:.2f} MB  ({compression_ratio:.1f}x compression)")
     print(f"  Peak RAM        :  {peak_mb:.1f} MB")
+    print(f"  -- Stage Timing --")
+    print(f"  Stages 1-3      :  {t_stage123_end - t_stage123:.2f}s  (ingest + parse + dedup)")
+    print(f"  Stage 4         :  {t_stage4_end - t_stage4:.2f}s  (features + anomaly)")
+    print(f"  Stage 5         :  {t_stage5_end - t_stage5:.2f}s  (Parquet save)")
     print(f"  Total time      :  {elapsed:.2f}s")
     print("=" * 60)
 

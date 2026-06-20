@@ -45,6 +45,8 @@ def deduplicate_chunk(
     lsh: MinHashLSH,
     parsed_logs: list[dict],
     num_perm: int = 64,
+    _minhash_cache: dict | None = None,
+    _seen_templates: set | None = None,
 ) -> list[dict]:
     """
     Remove near-duplicate entries from a parsed log chunk.
@@ -58,6 +60,8 @@ def deduplicate_chunk(
         parsed_logs: List of parsed log dicts from parser.py.
                      Each dict must have: raw, template, cluster_id, parameters.
         num_perm:    Must match the LSH index's num_perm.
+        _minhash_cache: (internal) Cache of template -> MinHash for reuse.
+        _seen_templates: (internal) Set of templates already processed.
 
     Returns:
         List of unique log dicts (near-duplicates removed).
@@ -66,14 +70,32 @@ def deduplicate_chunk(
     before = len(parsed_logs)
     unique = []
 
+    # Use shared caches if provided, otherwise use local ones
+    mh_cache = _minhash_cache if _minhash_cache is not None else {}
+    seen = _seen_templates if _seen_templates is not None else set()
+
     for i, log in enumerate(parsed_logs):
         template = log.get("template", log.get("raw", ""))
-        mh = make_minhash(template, num_perm)
-        key = f"{log.get('cluster_id', 'x')}_{i}"
+
+        # Fast path: if we've already seen this exact template, skip entirely
+        if template in seen:
+            continue
+
+        # Get or compute MinHash (cache by template string)
+        if template in mh_cache:
+            mh = mh_cache[template]
+        else:
+            mh = make_minhash(template, num_perm)
+            mh_cache[template] = mh
+
+        key = f"{log.get('cluster_id', 'x')}_{id(log)}"
 
         if not lsh.query(mh):
             lsh.insert(key, mh)
             unique.append(log)
+
+        # Mark this template as seen regardless of whether it was kept
+        seen.add(template)
 
     after = len(unique)
     print(f"[DEDUP]  {before} -> {after} unique entries  ({before - after} removed)")

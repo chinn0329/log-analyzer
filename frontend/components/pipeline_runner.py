@@ -8,7 +8,6 @@ import sys
 import time
 import tempfile
 import tracemalloc
-import gc
 
 # Resolve paths using absolute project root
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -60,7 +59,7 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
     })
 
     # ── STAGE 2: Parsing with Drain3 ───────────────────────────────────
-    from pipeline.parser import build_parser, parse_line
+    from pipeline.parser import build_parser, parse_chunk
 
     config_path = os.path.join(BACKEND_DIR, "configs", "drain3.ini")
     if os.path.exists(config_path):
@@ -68,9 +67,12 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
     else:
         miner = build_parser()
 
+    # Process in chunks for better performance
+    chunk_size = 2000
     parsed = []
-    for line in log_lines:
-        parsed.append(parse_line(miner, line))
+    for i in range(0, total_lines, chunk_size):
+        chunk = log_lines[i:i + chunk_size]
+        parsed.extend(parse_chunk(miner, chunk))
 
     unique_templates = len(set(p["template"] for p in parsed))
     _, mem_after_parse = tracemalloc.get_traced_memory()
@@ -90,7 +92,22 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
     from pipeline.deduplication import build_lsh, deduplicate_chunk
 
     lsh = build_lsh(threshold=0.8, num_perm=64)
-    deduped = deduplicate_chunk(lsh, parsed, num_perm=64)
+
+    # Shared caches for deduplication performance
+    minhash_cache = {}
+    seen_templates = set()
+
+    # Process dedup in chunks with shared caches for cross-chunk dedup
+    deduped = []
+    for i in range(0, len(parsed), chunk_size):
+        chunk = parsed[i:i + chunk_size]
+        unique = deduplicate_chunk(
+            lsh, chunk, num_perm=64,
+            _minhash_cache=minhash_cache,
+            _seen_templates=seen_templates,
+        )
+        deduped.extend(unique)
+
     _, mem_after_dedup = tracemalloc.get_traced_memory()
 
     entries_removed = len(parsed) - len(deduped)
@@ -182,5 +199,4 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
     metrics["results_df"] = results
     metrics["parquet_path"] = out_path
 
-    gc.collect()
     return metrics
