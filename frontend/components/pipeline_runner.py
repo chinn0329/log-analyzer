@@ -67,12 +67,13 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
     else:
         miner = build_parser()
 
-    # Process in chunks for better performance
+    # Process in chunks with shared cache for better performance
     chunk_size = 2000
+    parse_cache = {}  # masked_line -> (template, cluster_id, params)
     parsed = []
     for i in range(0, total_lines, chunk_size):
         chunk = log_lines[i:i + chunk_size]
-        parsed.extend(parse_chunk(miner, chunk))
+        parsed.extend(parse_chunk(miner, chunk, _parse_cache=parse_cache))
 
     unique_templates = len(set(p["template"] for p in parsed))
     _, mem_after_parse = tracemalloc.get_traced_memory()

@@ -72,9 +72,10 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     templates_extracted = 0
     deduped_all: list[dict] = []   # only unique entries accumulate here
 
-    # Shared caches for deduplication performance
-    minhash_cache: dict = {}
-    seen_templates: set = set()
+    # Shared caches for performance
+    parse_cache: dict = {}      # masked_line -> (template, cluster_id, params)
+    minhash_cache: dict = {}    # template -> MinHash object
+    seen_templates: set = set() # templates already processed by dedup
 
     # ══════════════════════════════════════════════════════════════════
     #  STREAMING LOOP — Stages 1->2->3 per chunk
@@ -90,8 +91,8 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
         chunk_size = len(chunk)
         lines_ingested += chunk_size
 
-        # Stage 2: Parse this chunk
-        parsed = parse_chunk(miner, chunk)
+        # Stage 2: Parse this chunk (cached — only new patterns hit Drain3)
+        parsed = parse_chunk(miner, chunk, _parse_cache=parse_cache)
         templates_extracted += len(parsed)
 
         # Stage 3: Deduplicate against ALL previously seen entries
