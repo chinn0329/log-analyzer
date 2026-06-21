@@ -25,11 +25,14 @@ def load_and_run():
     from components.pipeline_runner import run_pipeline_with_metrics
     out = os.path.join(BACKEND_DIR, "data", "processed")
     os.makedirs(out, exist_ok=True)
-    m = run_pipeline_with_metrics(lines, out)
+    explain = st.session_state.get("explain_enabled", False)
+    m = run_pipeline_with_metrics(lines, out, explain=explain)
     st.session_state["metrics"] = m
     st.session_state["df"] = pd.DataFrame([
         {k:v for k,v in r.items() if k not in ("features","parameters")} for r in m["results_df"]
     ])
+    if "llm_explanation" in st.session_state["df"].columns:
+        st.session_state["df"]["llm_explanation"] = st.session_state["df"]["llm_explanation"].fillna("")
 
 # ═══════════ LANDING PAGE ═══════════
 if "metrics" not in st.session_state and "df" not in st.session_state:
@@ -126,12 +129,17 @@ body{background:transparent; padding: 20px;}
 </body></html>""", height=620, scrolling=False)
 
     st.markdown("""<div style="text-align:center;margin:8px 0"><span style="font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#707978">UPLOAD LOG FILE TO BEGIN ANALYSIS</span></div>""", unsafe_allow_html=True)
+    _, cx, _ = st.columns([1,2,1])
+    with cx:
+        st.markdown('<style>div[data-testid="stCheckbox"] label p {color: #1E293B !important;}</style>', unsafe_allow_html=True)
+        st.session_state["explain_enabled"] = st.checkbox("🤖 Generate AI explanations for anomalies", value=False, help="Uses Groq's free LLM API to explain why each flagged anomaly is unusual. Adds processing time.")
     uploaded = st.file_uploader("Upload log file", type=["log","txt","parquet","csv"], label_visibility="collapsed")
     _, cb, _ = st.columns([2,1,2])
     with cb: sample_clicked = st.button("🧪 Use Sample File", use_container_width=True, type="primary")
     if sample_clicked and os.path.exists(SAMPLE_PATH):
         with open(SAMPLE_PATH,"r",encoding="utf-8",errors="replace") as f: c=f.read()
         st.session_state["raw_lines"]=c.strip().split("\n")
+        st.markdown('<style>div[data-testid="stSpinner"] p {color: #1E293B !important;}</style>', unsafe_allow_html=True)
         with st.spinner("⚙️ Running pipeline..."): load_and_run()
         st.rerun()
     if uploaded:

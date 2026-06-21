@@ -34,7 +34,14 @@ ac = len(anom_df)
 # Build table rows
 rows_html = ""
 if len(anom_df)>0:
-    for _, row in anom_df.sort_values("anomaly_score",ascending=False).head(8).iterrows():
+    # Only show anomalies that actually have an LLM explanation
+    if "llm_explanation" in anom_df.columns:
+        explained_df = anom_df[anom_df["llm_explanation"].notna() & (anom_df["llm_explanation"].astype(str).str.strip() != "") & (anom_df["llm_explanation"].astype(str).str.lower() != "nan")]
+    else:
+        explained_df = anom_df.iloc[0:0]  # empty DataFrame with same columns, no rows
+
+    
+    for _, row in explained_df.sort_values("anomaly_score",ascending=False).head(8).iterrows():
         raw = str(row.get("raw",""))[:65].replace("<","&lt;").replace(">","&gt;")
         tpl = str(row.get("template",""))[:30].replace("<","&lt;").replace(">","&gt;")
         sc = abs(row.get("anomaly_score",0))
@@ -43,8 +50,10 @@ if len(anom_df)>0:
         lb = LEVEL_BG.get(lv,"#F3F4F6")
         ie = lv in ("ERROR","CRITICAL")
         sp = min(sc*100,100)
+        exp = str(row.get("llm_explanation","")).strip()
+        exp_html = f"""<div style="margin-top:4px;padding:6px 10px;background:#EEF2FF;border-left:2px solid #6366F1;border-radius:4px;font-size:11px;color:#4338CA;font-style:italic">🤖 {exp}</div>"""
         rows_html += f"""<tr style="border-bottom:1px solid #eee;{'background:#FFF5F5' if ie else ''}">
-            <td style="padding:10px 16px;font-family:'Space Grotesk',monospace;font-size:12px;color:{'#991B1B' if ie else '#374151'};{'border-left:3px solid #DC2626' if ie else ''}">{raw}</td>
+            <td style="padding:10px 16px;font-family:'Space Grotesk',monospace;font-size:12px;color:{'#991B1B' if ie else '#374151'};{'border-left:3px solid #DC2626' if ie else ''}">{raw}{exp_html}</td>
             <td style="padding:10px 16px;font-size:12px;color:#6B7280">{tpl}</td>
             <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eee;height:8px;border-radius:4px;overflow:hidden"><div style="width:{sp}%;background:linear-gradient(90deg,#F59E0B,#DC2626);height:8px;border-radius:4px"></div></div><span style="font-size:12px;font-weight:700;color:#DC2626">{sc:.2f}</span></div></td>
             <td style="padding:10px 16px;text-align:center"><span style="background:{lb};color:{lc};padding:2px 8px;border-radius:2px;font-size:10px;font-weight:700">{lv}</span></td>

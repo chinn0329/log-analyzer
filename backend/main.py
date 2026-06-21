@@ -6,10 +6,12 @@ Processes log files in a STREAMING, chunk-by-chunk fashion:
   - Only deduplicated results accumulate in memory (60–90% smaller)
   - Stage 4 runs on the reduced dataset (fits in RAM easily)
   - Stage 5 saves compressed Parquet output
+  - Stage 6 (optional) uses an LLM to explain flagged anomalies
 
 Usage:
     python main.py --input data/samples/sample.log
     python main.py --input data/raw/BGL.log --output data/processed/ --profile
+    python main.py --input data/samples/sample.log --explain
 
 Author: Mayank Bajaj (1RV24CI066)
 """
@@ -31,12 +33,13 @@ def parse_args():
     parser.add_argument(
         "--profile", action="store_true", help="Enable memory profiling"
     )
+    parser.add_argument("--explain", action="store_true", help="Use Gemini LLM to explain flagged anomalies")
     return parser.parse_args()
 
 
-def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
+def run_pipeline(input_path: str, output_dir: str, profile: bool = False, explain: bool = False):
     """
-    Execute the full 5-stage log analysis pipeline.
+    Execute the full log analysis pipeline.
 
     Memory strategy:
       - Stages 1->2->3 run per-chunk in a streaming loop.
@@ -45,6 +48,7 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
       - After all chunks, the deduplicated set (60–90% smaller than raw)
         goes through Stage 4 (feature extraction + anomaly detection).
       - Stage 5 saves everything to compressed Parquet.
+      - Stage 6 (optional, --explain) asks an LLM to explain flagged anomalies.
 
     This keeps peak RAM proportional to the DEDUPLICATED size,
     not the raw file size.
@@ -61,8 +65,9 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     from pipeline.parser import build_parser, parse_chunk
     from pipeline.deduplication import build_lsh, deduplicate_chunk
     from pipeline.feature_extraction import build_features
-    from pipeline.anomaly_detector import train_model, score_logs
+    from pipeline.anomaly_detector import train_model, score_logs, print_anomaly_summary
     from pipeline.storage import save_parquet
+    from pipeline.llm_reasoning import explain_anomalies
 
     # ── Initialise shared state for streaming stages ───────────────────
     miner = build_parser()                          # Drain3 template miner
@@ -137,6 +142,22 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     print(f"      Stage 4 time           : {t_stage4_end - t_stage4:.2f}s")
     print()
 
+    print_anomaly_summary(results)
+    print()
+
+    # ══════════════════════════════════════════════════════════════════
+    #  Stage 6 (optional): LLM explanation of flagged anomalies
+    #  Only called on the small anomalous subset — not the full dataset.
+    #  Safe no-op if no GEMINI_API_KEY is configured.
+    # ══════════════════════════════════════════════════════════════════
+    if explain:
+        print("[6/6] Generating LLM explanations for anomalies ...")
+        t_stage6 = time.time()
+        results = explain_anomalies(results)
+        t_stage6_end = time.time()
+        print(f"      Stage 6 time           : {t_stage6_end - t_stage6:.2f}s")
+        print()
+
     # ══════════════════════════════════════════════════════════════════
     #  Stage 5: Save to Parquet (compressed columnar format)
     # ══════════════════════════════════════════════════════════════════
@@ -185,6 +206,9 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     print(f"  After dedup     :  {unique_entries:,} unique entries")
     print(f"  Dedup reduction :  {100*(1 - unique_entries/max(lines_ingested,1)):.1f}%")
     print(f"  Anomalies found :  {anomaly_count:,}  ({anomaly_pct:.1f}%)")
+    if explain:
+        explained_count = sum(1 for r in results if "llm_explanation" in r)
+        print(f"  LLM explained   :  {explained_count:,} anomalies")
     print(f"  Output saved    :  {out_path}")
     if raw_size_mb > 0:
         print(f"  Raw file size   :  {raw_size_mb:.2f} MB")
@@ -193,6 +217,8 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
     print(f"  -- Stage Timing --")
     print(f"  Stages 1-3      :  {t_stage123_end - t_stage123:.2f}s  (ingest + parse + dedup)")
     print(f"  Stage 4         :  {t_stage4_end - t_stage4:.2f}s  (features + anomaly)")
+    if explain:
+        print(f"  Stage 6         :  {t_stage6_end - t_stage6:.2f}s  (LLM explanations)")
     print(f"  Stage 5         :  {t_stage5_end - t_stage5:.2f}s  (Parquet save)")
     print(f"  Total time      :  {elapsed:.2f}s")
     print("=" * 60)
@@ -200,4 +226,4 @@ def run_pipeline(input_path: str, output_dir: str, profile: bool = False):
 
 if __name__ == "__main__":
     args = parse_args()
-    run_pipeline(args.input, args.output, args.profile)
+    run_pipeline(args.input, args.output, args.profile, args.explain)

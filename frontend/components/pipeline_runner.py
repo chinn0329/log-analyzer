@@ -22,9 +22,15 @@ def get_sample_path():
     return os.path.join(BACKEND_DIR, "data", "samples", "sample.log")
 
 
-def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
+def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None, explain: bool = False):
     """
-    Run the full 5-stage pipeline on a list of raw log lines.
+    Run the full pipeline on a list of raw log lines.
+
+    Args:
+        log_lines: Raw log file lines.
+        output_dir: Where to save the Parquet output.
+        explain: If True, runs Stage 6 — asks an LLM (Groq) to explain
+                 flagged anomalies. Safe no-op if GROQ_API_KEY isn't set.
 
     Returns a dict with detailed metrics at every stage.
     """
@@ -67,9 +73,8 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
     else:
         miner = build_parser()
 
-    # Process in chunks with shared cache for better performance
     chunk_size = 2000
-    parse_cache = {}  # masked_line -> (template, cluster_id, params)
+    parse_cache = {}
     parsed = []
     for i in range(0, total_lines, chunk_size):
         chunk = log_lines[i:i + chunk_size]
@@ -93,12 +98,9 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
     from pipeline.deduplication import build_lsh, deduplicate_chunk
 
     lsh = build_lsh(threshold=0.8, num_perm=64)
-
-    # Shared caches for deduplication performance
     minhash_cache = {}
     seen_templates = set()
 
-    # Process dedup in chunks with shared caches for cross-chunk dedup
     deduped = []
     for i in range(0, len(parsed), chunk_size):
         chunk = parsed[i:i + chunk_size]
@@ -156,6 +158,31 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
         "data_loss": "None — only adds anomaly_score and is_anomaly fields",
     })
 
+    # ── STAGE 6 (optional): LLM explanation of flagged anomalies ───────
+    # Called only on the small anomalous subset, never the full dataset.
+    # Safe no-op if explain=False or GROQ_API_KEY isn't configured.
+    explained_count = 0
+    if explain:
+        from pipeline.llm_reasoning import explain_anomalies
+
+        t_explain_start = time.time()
+        results = explain_anomalies(results)
+        t_explain_elapsed = time.time() - t_explain_start
+
+        explained_count = sum(1 for r in results if r.get("llm_explanation"))
+        _, mem_after_explain = tracemalloc.get_traced_memory()
+
+        metrics["stages"].append({
+            "name": "Stage 6 — LLM Anomaly Explanation",
+            "description": "Groq LLM explains why flagged entries are unusual",
+            "lines_in": anomaly_count,
+            "lines_out": explained_count,
+            "reduction_pct": 0.0,
+            "ram_mb": round(mem_after_explain / (1024 * 1024), 2),
+            "data_loss": "None — adds llm_explanation field to explained anomalies only",
+            "elapsed_seconds": round(t_explain_elapsed, 2),
+        })
+
     # ── STAGE 5: Parquet Storage ───────────────────────────────────────
     from pipeline.storage import save_parquet
 
@@ -187,6 +214,7 @@ def run_pipeline_with_metrics(log_lines: list[str], output_dir: str = None):
         "total_records": len(results),
         "anomaly_count": anomaly_count,
         "anomaly_pct": round(anomaly_pct, 1),
+        "explained_count": explained_count,
         "parquet_path": out_path,
         "raw_size_bytes": raw_size_bytes,
         "raw_size_mb": round(raw_size_bytes / (1024 * 1024), 4),

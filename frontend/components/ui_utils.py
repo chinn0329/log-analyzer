@@ -44,6 +44,18 @@ def apply_custom_styles():
         display: none !important;
     }
 
+    div[data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+
+    nav[data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+
+    ul[data-testid="stSidebarNavItems"] {
+        display: none !important;
+    }
+
     .sidebar-header {
         padding: 2rem 1rem 1rem 1rem;
         text-align: center;

@@ -2,7 +2,6 @@
 storage.py — Stage 5a: Save and load processed logs using PyArrow Parquet.
 
 Parquet gives columnar compression — typically 5-10x smaller than raw logs.
-
 """
 
 import os
@@ -17,6 +16,7 @@ SCHEMA = pa.schema([
     ("anomaly_score", pa.float32()),
     ("is_anomaly", pa.bool_()),
     ("log_level", pa.int8()),
+    ("llm_explanation", pa.string()),
 ])
 
 
@@ -43,6 +43,7 @@ def save_parquet(logs: list[dict], output_dir: str, filename: str = "output.parq
             "anomaly_score": log.get("anomaly_score", 0.0),
             "is_anomaly": log.get("is_anomaly", False),
             "log_level": log.get("features", [1])[0] if log.get("features") else 1,
+            "llm_explanation": log.get("llm_explanation", ""),
         } for log in logs],
         schema=SCHEMA,
     )
